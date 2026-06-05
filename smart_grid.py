@@ -26,7 +26,8 @@ SHOP_TYPES = [
     "Laundry",
     "Pharmacy",
     "Supermarket",
-    "Hardware",
+    "Hardware Shop",
+    "Mini Market",
 ]
 
 RESIDENTIAL_TYPES = [
@@ -34,6 +35,8 @@ RESIDENTIAL_TYPES = [
     "Townhouse",
     "Bungalow",
     "Terrace House",
+    "Corner House",
+    "Luxury House",
 ]
 
 WEATHER_CONFIG = {
@@ -163,19 +166,17 @@ def generate_house(
     house_num: int,
     solar_probability: float = 0.5,
     rng: Optional[random.Random] = None,
+    has_solar: Optional[bool] = None,
 ) -> House:
     """Create one house using the updated reference probabilities."""
 
     source = rng or random
     solar_probability = min(max(solar_probability, 0.0), 1.0)
-    has_solar = source.random() < solar_probability
+    if has_solar is None:
+        has_solar = source.random() < solar_probability
     max_power = source.uniform(15, 40) if has_solar else 0.0
     building_type = source.choice(RESIDENTIAL_TYPES if has_solar else SHOP_TYPES)
-    display_name = (
-        f"{building_type} {house_num}"
-        if has_solar
-        else f"{building_type} Shop {house_num}"
-    )
+    display_name = f"{building_type} {house_num}" if has_solar else _shop_display_name(building_type, house_num)
 
     return House(
         house_id=house_num,
@@ -197,8 +198,17 @@ def simulate_houses(
         raise ValueError("num_houses must be at least 1")
 
     source = random.Random(seed) if seed is not None else random
+    solar_probability = min(max(solar_probability, 0.0), 1.0)
+    solar_count = min(num_houses, max(0, int(num_houses * solar_probability + 0.5)))
+    solar_indices = set(source.sample(range(num_houses), solar_count))
+
     return [
-        generate_house(i + 1, solar_probability=solar_probability, rng=source)
+        generate_house(
+            i + 1,
+            solar_probability=solar_probability,
+            rng=source,
+            has_solar=i in solar_indices,
+        )
         for i in range(num_houses)
     ]
 
@@ -384,6 +394,12 @@ def _house_to_dict(house: House) -> Dict[str, object]:
         "has_solar": house.has_solar,
         "max_power": round(house.max_power, 2),
     }
+
+
+def _shop_display_name(building_type: str, house_num: int) -> str:
+    if building_type.endswith("Shop") or building_type.endswith("Market"):
+        return f"{building_type} {house_num}"
+    return f"{building_type} Shop {house_num}"
 
 
 def _validate_hour(hour: int) -> None:
